@@ -1,0 +1,265 @@
+import os
+import json
+import subprocess
+import pandas as pd
+from pathlib import Path
+from java_commit_utils import (
+    parse_patch,
+    extract_functions_and_classes_by_patch,
+    apply_and_extract_with_commit,
+    get_commit_log,
+    get_jira_description,
+)
+
+
+def defects4j_checkout(base_path, project, bug_id, output_dir):
+    """
+    Use defect4j checkout to get the buggy version of a project.
+    """
+    # Determine whether the output directory exists
+    if os.path.exists(output_dir):
+        return
+
+    print(f"Checking out {project} bug {bug_id}...")
+    subprocess.run(
+        [
+            f"{base_path}/framework/bin/defects4j",
+            "checkout",
+            "-p",
+            project,
+            "-v",
+            f"{bug_id}b",  # buggy version
+            "-w",
+            output_dir,  # Specify the output directory
+        ],
+        check=True,
+    )
+
+
+def apply_and_extract_with_patch(repo_path, patch_file, to_get_bugs=False):
+    """
+    Apply the patch and extract the code structure.
+    """
+    if not os.path.exists(patch_file):
+        return {}
+
+    changes = parse_patch(patch_file, is_file_name=True)
+    extracted_data = {}
+
+    # If reverse is True, apply the patch in reverse
+    try:
+        subprocess.run(
+            (
+                ["git", "apply", "--reverse", patch_file]
+                if not to_get_bugs
+                else ["git", "apply", patch_file]
+            ),
+            cwd=repo_path,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Error applying patch {patch_file}: {e}")
+    except Exception as e:
+        print(f"Common Error applying patch {patch_file}: {e}")
+
+    extracted_data = extract_functions_and_classes_by_patch(
+        repo_path, changes, not to_get_bugs
+    )
+
+    return extracted_data
+
+
+def process_bug(base_path, projects_path, project, bug):
+    """
+    Process a single bug in a project.
+    """
+    bug_id = bug["bug_id"]
+
+    print(f"\nProcessing {project} bug {bug_id}...")
+
+    project_path = os.path.join(projects_path, project)
+
+    to_use_patch = False
+
+    if to_use_patch:
+        repo_path = os.path.join(project_path, f"{project}_bug_{bug_id}")
+        src_patch_file = os.path.join(project_path, "patches", f"{bug_id}.src.patch")
+        test_patch_file = os.path.join(project_path, "patches", f"{bug_id}.test.patch")
+
+        # Checkout the buggy version
+        defects4j_checkout(base_path, project, bug_id, repo_path)
+        # Function code processing
+        print("Processing the code before the patch...")
+        functions_before = apply_and_extract_with_patch(
+            repo_path, src_patch_file, to_get_bugs=True
+        )
+        print("Processing the code after the patch...")
+        functions_after = apply_and_extract_with_patch(repo_path, src_patch_file)
+
+        # Test case processing
+        print("Processing the test cases before the patch...")
+        test_cases_before = apply_and_extract_with_patch(
+            repo_path, test_patch_file, to_get_bugs=True
+        )
+        print("Processing the test cases after the patch...")
+
+        test_cases_after = apply_and_extract_with_patch(repo_path, test_patch_file)
+
+    else:
+        repo_path = os.path.join(base_path, "project_repos", f"repo_{project}")
+        print("Processing the code before the commit...")
+        functions_before, test_cases_before = apply_and_extract_with_commit(
+            repo_path, bug, to_get_bugs=True
+        )
+        print("Processing the code after the commit...")
+        functions_after, test_cases_after = apply_and_extract_with_commit(
+            repo_path, bug
+        )
+        description_log = get_commit_log(repo_path, bug["revision_fixed"])
+        description_question = get_jira_description(bug["url"])
+
+    # Organize the data
+    bug_data = {
+        "source": f"defects4j_{project}_{bug_id}",
+        "description_commit": description_log,
+        "description_question": description_question,
+        "function_codes_before": functions_before,
+        "function_codes_after": functions_after,
+        "test_cases_before": test_cases_before,
+        "test_cases_after": test_cases_after,
+        "relevant_test_cases": [],  # TODO: Add relevant test cases
+    }
+
+    print(f"Processed {project} bug {bug_id}.\n")
+    return bug_data
+
+
+def save_to_json(data, output_file):
+    """
+    Save data to a JSON file.
+    """
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+        # Write/overwrite file
+        with open(output_file, "w") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving JSON file {output_file}: {e}")
+
+
+def get_active_bugs(project_path):
+    """
+    Read bug IDs and revision IDs from active-bugs.csv
+
+    Returns:
+        List of dicts: [
+            {
+                'bug_id': str,
+                'revision_buggy': str,
+                'revision_fixed': str,
+                'report_id': str,
+                'url': str
+            },
+            ...
+        ]
+    """
+    csv_path = os.path.join(project_path, "active-bugs.csv")
+    try:
+        df = pd.read_csv(csv_path)
+
+        # Map CSV columns to desired names
+        column_mapping = {
+            "bug.id": "bug_id",
+            "revision.id.buggy": "revision_buggy",
+            "revision.id.fixed": "revision_fixed",
+            "report.id": "report_id",
+            "report.url": "url",
+        }
+
+        # Select and rename columns
+        bugs_info = df[list(column_mapping.keys())].rename(columns=column_mapping)
+
+        # Convert to list of dictionaries and sort by bug_id
+        return sorted(bugs_info.to_dict("records"), key=lambda x: int(x["bug_id"]))
+    except Exception as e:
+        print(f"Error reading active-bugs.csv: {e}")
+        return []
+
+
+def process_defects4j(base_path, output_path):
+    """
+    Handle all defects4j projects and bugs.
+    """
+    testing = True
+    filtering = True
+
+    projects_path = Path(base_path, "framework", "projects")
+    projects = [
+        name
+        for name in os.listdir(projects_path)
+        if os.path.isdir(os.path.join(projects_path, name))
+    ]
+    for project in projects:
+        # # TODO: For testing
+        if testing and filtering and project != "Cli":
+            continue
+        all_data = []
+
+        project_path = os.path.join(projects_path, project)
+        patch_dir = os.path.join(project_path, "patches")
+        output_file = os.path.join(output_path, f"{project}.json")
+        if not os.path.exists(patch_dir):
+            continue
+
+        # Get bug IDs from active-bugs.csv
+        bugs = get_active_bugs(project_path)
+
+        for bug in bugs:
+            # # TODO: for testing!
+            if testing and filtering and bug["bug_id"] != 13:
+                continue
+            try:
+                bug_data = process_bug(base_path, projects_path, project, bug)
+                bug_data["id"] = len(all_data)
+                all_data.append(bug_data)
+            except Exception as e:
+                print(f"Error processing {project} bug {bug['bug_id']}: {e}")
+
+        save_to_json(all_data, output_file)
+
+        # todo: For testing
+        # if testing and len(bugs) != len(all_data):
+        #     print(project)
+        #     if project == "Math":
+        #         continue
+        #     break
+
+
+if __name__ == "__main__":
+    # Target information:
+    # - id: xx
+    # - source: defects4j_xx
+    # - description_question: xx
+    # - description_commit: xx
+    # - url: xx
+    # - function_codes_before: xx
+    # - function_codes_after: xx
+    # - test_cases_before: Used to train the outdated test case
+    # - test_cases_after: Used to train the aligned test case
+    # - relevant_test_cases: Used to train the unaligned test case
+
+    defects4j_path = "data/defects4j"
+    output_path = "data/processed_defects4j"
+
+    # 1. Iterate through all projects [Names of directories in defects4j/framework]
+    # 1.1. Iterate through all bugs [In project's directory/active-bugs.csv]
+    # 1.1.1. Get the location for original and changed code and test cases [In project's directory/patches]
+    # 1.1.2. Get the source code with entire methods and test cases based on the location [function_codes_before, test_cases_before]
+    # 1.1.3. Get the changed code with entire methods and test cases based on the location [function_codes_after, test_cases_after]
+    # 1.1.4. Get the url. And based on the information in that url, extract the description of the commit [description_question, url]
+    # 2. Save the information in a JSON file
+    process_defects4j(defects4j_path, output_path)
