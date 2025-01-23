@@ -8,6 +8,7 @@ from java_commit_utils import (
     extract_functions_and_classes_by_patch,
     apply_and_extract_with_commit,
     get_commit_log,
+    get_commit_changes,
     get_jira_description,
 )
 
@@ -36,14 +37,13 @@ def defects4j_checkout(base_path, project, bug_id, output_dir):
     )
 
 
-def apply_and_extract_with_patch(repo_path, patch_file, to_get_bugs=False):
+def apply_and_extract_with_patch(repo_path, changes, patch_file, to_get_bugs=False):
     """
     Apply the patch and extract the code structure.
     """
     if not os.path.exists(patch_file):
         return {}
 
-    changes = parse_patch(patch_file, is_file_name=True)
     extracted_data = {}
 
     # If reverse is True, apply the patch in reverse
@@ -91,31 +91,46 @@ def process_bug(base_path, projects_path, project, bug):
         # Checkout the buggy version
         defects4j_checkout(base_path, project, bug_id, repo_path)
         # Function code processing
+        functions_changes = parse_patch(src_patch_file, is_file_name=True)
+
         print("Processing the code before the patch...")
         functions_before = apply_and_extract_with_patch(
-            repo_path, src_patch_file, to_get_bugs=True
+            repo_path, functions_changes, src_patch_file, to_get_bugs=True
         )
         print("Processing the code after the patch...")
-        functions_after = apply_and_extract_with_patch(repo_path, src_patch_file)
+        functions_after = apply_and_extract_with_patch(
+            repo_path, functions_changes, src_patch_file
+        )
 
         # Test case processing
+        test_cases_changes = parse_patch(src_patch_file, is_file_name=True)
+
         print("Processing the test cases before the patch...")
         test_cases_before = apply_and_extract_with_patch(
-            repo_path, test_patch_file, to_get_bugs=True
+            repo_path, test_cases_changes, test_patch_file, to_get_bugs=True
         )
         print("Processing the test cases after the patch...")
 
-        test_cases_after = apply_and_extract_with_patch(repo_path, test_patch_file)
+        test_cases_after = apply_and_extract_with_patch(
+            repo_path, test_cases_changes, test_patch_file
+        )
 
     else:
         repo_path = os.path.join(base_path, "project_repos", f"repo_{project}")
+
+        commit_hash = bug["revision_fixed"]
+        patch_content = get_commit_changes(repo_path, commit_hash)
+
+        changes = parse_patch(patch_content, is_file_name=False)
+
         print("Processing the code before the commit...")
         functions_before, test_cases_before = apply_and_extract_with_commit(
-            repo_path, bug, to_get_bugs=True
+            repo_path, changes, bug, to_get_bugs=True
         )
+
         print("Processing the code after the commit...")
         functions_after, test_cases_after = apply_and_extract_with_commit(
-            repo_path, bug
+            repo_path, changes, bug
         )
         description_log = get_commit_log(repo_path, bug["revision_fixed"])
         description_question = get_jira_description(bug["url"])
@@ -205,7 +220,7 @@ def process_defects4j(base_path, output_path):
     ]
     for project in projects:
         # # TODO: For testing
-        if testing and filtering and project != "Cli":
+        if testing and filtering and project != "Math":
             continue
         all_data = []
 
@@ -220,7 +235,7 @@ def process_defects4j(base_path, output_path):
 
         for bug in bugs:
             # # TODO: for testing!
-            if testing and filtering and bug["bug_id"] != 13:
+            if testing and filtering and bug["bug_id"] != 1:
                 continue
             try:
                 bug_data = process_bug(base_path, projects_path, project, bug)

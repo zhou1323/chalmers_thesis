@@ -37,7 +37,7 @@ def get_jira_description(url: str) -> str:
         return ""
 
 
-def apply_and_extract_with_commit(repo_path, bug, to_get_bugs=False):
+def apply_and_extract_with_commit(repo_path, changes, bug, to_get_bugs=False):
     """
     Apply the commit and extract the code structure.
 
@@ -47,9 +47,6 @@ def apply_and_extract_with_commit(repo_path, bug, to_get_bugs=False):
         to_get_bugs: Flag to get buggy or fixed commit
     """
     commit_hash = bug["revision_buggy"] if to_get_bugs else bug["revision_fixed"]
-    patch_content = get_commit_changes(repo_path, commit_hash)
-
-    changes = parse_patch(patch_content, is_file_name=False)
 
     extracted_data = {}
 
@@ -191,7 +188,6 @@ def extract_code_structure(java_code, start_line, end_line):
         structure_types = {
             javalang.tree.MethodDeclaration: "method",
             javalang.tree.ConstructorDeclaration: "constructor",
-            javalang.tree.ClassDeclaration: "class",
         }
 
         # Try to extract each type of structure
@@ -202,12 +198,61 @@ def extract_code_structure(java_code, start_line, end_line):
             if result:
                 return result
 
+        # Special handling for class declarations
+        if _is_class_change(start_line, end_line, tree, lines):
+            return _extract_class_fields(tree, lines, start_line, end_line)
+
         # Fallback to single line extraction
         return _extract_single_line(lines, start_line, end_line)
 
     except Exception as e:
         print(f"Error parsing Java code: {e}")
         return None
+
+
+def _extract_class_fields(tree, lines, start_line, end_line):
+    """Extract only field declarations from class"""
+    for _, node in tree.filter(javalang.tree.ClassDeclaration):
+        if hasattr(node, "position") and node.position:
+            class_start = node.position.line
+
+            # Find first method/constructor position
+            first_method_line = float("inf")
+            for member in node.body:
+                if isinstance(
+                    member,
+                    (
+                        javalang.tree.MethodDeclaration,
+                        javalang.tree.ConstructorDeclaration,
+                    ),
+                ):
+                    if hasattr(member, "position") and member.position:
+                        first_method_line = min(first_method_line, member.position.line)
+
+            if first_method_line == float("inf"):
+                first_method_line = _find_structure_end(lines, class_start)
+
+            if has_intersection_between_code_lines(
+                [class_start, first_method_line], [start_line, end_line]
+            ):
+                return {
+                    "type": "class",
+                    "code": "".join(lines[class_start - 1 : first_method_line - 1]),
+                }
+    return None
+
+
+def _is_class_change(start_line, end_line, tree, lines):
+    """Check if the change is within a class declaration"""
+    for _, node in tree.filter(javalang.tree.ClassDeclaration):
+        if hasattr(node, "position") and node.position:
+            class_start = node.position.line
+            class_end = _find_structure_end(lines, class_start)
+            if has_intersection_between_code_lines(
+                [class_start, class_end], [start_line, end_line]
+            ):
+                return True
+    return False
 
 
 def _extract_structure(tree, lines, start_line, end_line, node_type, structure_type):
