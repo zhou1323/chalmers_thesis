@@ -1,2 +1,5 @@
 # Ignore all files in the data directory
 data/*
+
+# Ignore the automatically generated python cache files
+__pycache__/
