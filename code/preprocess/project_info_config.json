@@ -1,0 +1,130 @@
+{
+  "BugsInPy": {
+    "ansible": {
+      "python_version": "3.6.9"
+    },
+    "black": {
+      "python_version": "3.8.3"
+    },
+    "cookiecutter": {
+      "python_version": "3.6.9"
+    },
+    "fastapi": {
+      "python_version": "3.8.3"
+    },
+    "httpie": {
+      "python_version": "3.7.3"
+    },
+    "keras": {
+      "python_version": "3.7.3"
+    },
+    "luigi": {
+      "python_version": "3.8.3"
+    },
+    "matplotlib": {
+      "python_version": "3.8.1"
+    },
+    "pandas": {
+      "python_version": "3.8.3"
+    },
+    "PySnooper": {
+      "python_version": "3.8.1"
+    },
+    "sanic": {
+      "python_version": "3.8.3"
+    },
+    "scrapy": {
+      "python_version": "3.8.3"
+    },
+    "spacy": {
+      "python_version": "3.7.7"
+    },
+    "thefuck": {
+      "python_version": "3.7.0"
+    },
+    "tornado": {
+      "python_version": "3.7.0"
+    },
+    "tqdm": {
+      "python_version": "3.6.9"
+    },
+    "youtube-dl": {
+      "python_version": "3.7.0"
+    }
+  },
+  "BuGL": {
+    "certbot": {
+      "python_version": "3.9.15"
+    },
+    "django-rest-framework": {
+      "python_version": "3.8.3"
+    },
+    "flask": {
+      "python_version": "3.5.10"
+    },
+    "pipenv": {
+      "python_version": "3.8.3"
+    },
+    "requests": {
+      "python_version": "3.8.3"
+    },
+    "scikit-learn": {
+      "python_version": "3.9.15"
+    },
+    "scrapy": {
+      "python_version": "3.8.3"
+    },
+    "spacy": {
+      "python_version": "3.7.7"
+    },
+    "tornado": {
+      "python_version": "3.7.0"
+    }
+  },
+  "Pybughive": {
+    "black": {
+      "python_version": "3.7",
+      "install_steps": "pip install setuptools==68.0.0; pip install -r test_requirements.txt; pip install click==8.0.2; pip install pytest==6.2.5; pip install -e .[d]"
+    },
+    "cookiecutter": {
+      "python_version": "3.8",
+      "install_steps": "pip install -r test_requirements.txt; python setup.py install"
+    },
+    "pandas": {
+      "python_version": "3.8",
+      "install_steps": "pip install setuptools==39.1.0; pip install numpy==1.16.0; pip install cython==0.29.36; pip install pytz python-dateutil nose py pytest; make clean; make develop"
+    },
+    "scrapy": {
+      "python_version": "3.8",
+      "install_steps": "pip install pytest; pip install twisted[tls]; pip install -r requirements-py3.txt; pip install ."
+    },
+    "spaCy": {
+      "python_version": "3.7",
+      "install_steps": "pip install -U pip setuptools wheel; pip install -r requirements.txt --default-timeout=100; pip install Cython==0.29.22; pip install attrs==19.1.0; pip install --no-build-isolation --editable ."
+    },
+    "salt": {
+      "python_version": "3.8",
+      "install_steps": "pip install -e .; pip install nox"
+    },
+    "numpy": {
+      "python_version": "3.9",
+      "install_steps": "git submodule update --init; pip install -r test_requirements.txt; python setup.py build_ext --inplace -j 4"
+    },
+    "discord.py": {
+      "python_version": "3.8",
+      "install_steps": "pip install -e .[test]"
+    },
+    "poetry": {
+      "python_version": "",
+      "install_steps": "pipx install poetry==1.2.0 --force; poetry env use python3.8; poetry install"
+    },
+    "freqtrade": {
+      "python_version": "3.8",
+      "install_steps": "sudo wget -c http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz; tar -xzf ta-lib-0.4.0-src.tar.gz; cd ta-lib && ./configure --prefix=/usr && make && sudo make install ; pip install TA-Lib; pip install --upgrade pip wheel; export LD_LIBRARY_PATH=${HOME}/dependencies/lib:$LD_LIBRARY_PATH; export TA_LIBRARY_PATH=${HOME}/dependencies/lib; export TA_INCLUDE_PATH=${HOME}/dependencies/include; pip install -r requirements-dev.txt; pip install -e ."
+    },
+    "jax": {
+      "python_version": "3.10",
+      "install_steps": "pip install numpy wheel build; python3 build/build.py; pip install dist/*.whl; pip install -e .; pip install -r build/test-requirements.txt; rm dist/*"
+    }
+  }
+}
