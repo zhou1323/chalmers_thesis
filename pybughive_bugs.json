@@ -1,0 +1,47 @@
+[
+    {
+        "source": "pybughive_black_2254",
+        "description_commit": "Possible fix for issue with indentation and fmt: skip (#2281)\n\nNot sure the fix is right.  Here is what I found: issue is connected\r\nwith line\r\n\r\n    first.prefix = prefix[comment.consumed :]\r\n\r\nin `comments.py`.  `first.prefix` is a prefix of the line, that ends\r\nwith `# fmt: skip`, but `comment.consumed` is the length of the\r\n`\"  # fmt: skip\"` string.  If prefix length is greater than 14,\r\n`first.prefix` will grow every time we apply formatting.\r\n\r\nFixes #2254",
+        "description_question": "fmt:skip fails with internal error",
+        "function_codes_before": {
+            "/home/luke/Desktop/chalmers_thesis/data/Pybughive/black/src/black/comments.py": [
+                {
+                    "type": "function",
+                    "code": "def convert_one_fmt_off_pair(node: Node) -> bool:\n    \"\"\"Convert content of a single `# fmt: off`/`# fmt: on` into a standalone comment.\n\n    Returns True if a pair was converted.\n    \"\"\"\n    for leaf in node.leaves():\n        previous_consumed = 0\n        for comment in list_comments(leaf.prefix, is_endmarker=False):\n            if comment.value not in FMT_PASS:\n                previous_consumed = comment.consumed\n                continue\n            # We only want standalone comments. If there's no previous leaf or\n            # the previous leaf is indentation, it's a standalone comment in\n            # disguise.\n            if comment.value in FMT_PASS and comment.type != STANDALONE_COMMENT:\n                prev = preceding_leaf(leaf)\n                if prev:\n                    if comment.value in FMT_OFF and prev.type not in WHITESPACE:\n                        continue\n                    if comment.value in FMT_SKIP and prev.type in WHITESPACE:\n                        continue\n\n            ignored_nodes = list(generate_ignored_nodes(leaf, comment))\n            if not ignored_nodes:\n                continue\n\n            first = ignored_nodes[0]  # Can be a container node with the `leaf`.\n            parent = first.parent\n            prefix = first.prefix\n            first.prefix = prefix[comment.consumed :]\n            hidden_value = \"\".join(str(n) for n in ignored_nodes)\n            if comment.value in FMT_OFF:\n                hidden_value = comment.value + \"\\n\" + hidden_value\n            if comment.value in FMT_SKIP:\n                hidden_value += \"  \" + comment.value\n            if hidden_value.endswith(\"\\n\"):\n                # That happens when one of the `ignored_nodes` ended with a NEWLINE\n                # leaf (possibly followed by a DEDENT).\n                hidden_value = hidden_value[:-1]\n            first_idx: Optional[int] = None\n            for ignored in ignored_nodes:\n                index = ignored.remove()\n                if first_idx is None:\n                    first_idx = index\n            assert parent is not None, \"INTERNAL ERROR: fmt: on/off handling (1)\"\n            assert first_idx is not None, \"INTERNAL ERROR: fmt: on/off handling (2)\"\n            parent.insert_child(\n                first_idx,\n                Leaf(\n                    STANDALONE_COMMENT,\n                    hidden_value,\n                    prefix=prefix[:previous_consumed] + \"\\n\" * comment.newlines,\n                ),\n            )\n            return True\n\n    return False\n\n"
+                }
+            ]
+        },
+        "function_codes_after": {
+            "/home/luke/Desktop/chalmers_thesis/data/Pybughive/black/src/black/comments.py": [
+                {
+                    "type": "function",
+                    "code": "def convert_one_fmt_off_pair(node: Node) -> bool:\n    \"\"\"Convert content of a single `# fmt: off`/`# fmt: on` into a standalone comment.\n\n    Returns True if a pair was converted.\n    \"\"\"\n    for leaf in node.leaves():\n        previous_consumed = 0\n        for comment in list_comments(leaf.prefix, is_endmarker=False):\n            if comment.value not in FMT_PASS:\n                previous_consumed = comment.consumed\n                continue\n            # We only want standalone comments. If there's no previous leaf or\n            # the previous leaf is indentation, it's a standalone comment in\n            # disguise.\n            if comment.value in FMT_PASS and comment.type != STANDALONE_COMMENT:\n                prev = preceding_leaf(leaf)\n                if prev:\n                    if comment.value in FMT_OFF and prev.type not in WHITESPACE:\n                        continue\n                    if comment.value in FMT_SKIP and prev.type in WHITESPACE:\n                        continue\n\n            ignored_nodes = list(generate_ignored_nodes(leaf, comment))\n            if not ignored_nodes:\n                continue\n\n            first = ignored_nodes[0]  # Can be a container node with the `leaf`.\n            parent = first.parent\n            prefix = first.prefix\n            if comment.value in FMT_OFF:\n                first.prefix = prefix[comment.consumed :]\n            if comment.value in FMT_SKIP:\n                first.prefix = \"\"\n            hidden_value = \"\".join(str(n) for n in ignored_nodes)\n            if comment.value in FMT_OFF:\n                hidden_value = comment.value + \"\\n\" + hidden_value\n            if comment.value in FMT_SKIP:\n                hidden_value += \"  \" + comment.value\n            if hidden_value.endswith(\"\\n\"):\n                # That happens when one of the `ignored_nodes` ended with a NEWLINE\n                # leaf (possibly followed by a DEDENT).\n                hidden_value = hidden_value[:-1]\n            first_idx: Optional[int] = None\n            for ignored in ignored_nodes:\n                index = ignored.remove()\n                if first_idx is None:\n                    first_idx = index\n            assert parent is not None, \"INTERNAL ERROR: fmt: on/off handling (1)\"\n            assert first_idx is not None, \"INTERNAL ERROR: fmt: on/off handling (2)\"\n            parent.insert_child(\n                first_idx,\n                Leaf(\n                    STANDALONE_COMMENT,\n                    hidden_value,\n                    prefix=prefix[:previous_consumed] + \"\\n\" * comment.newlines,\n                ),\n            )\n            return True\n\n    return False\n\n"
+                }
+            ]
+        },
+        "test_cases_before": {
+            "/home/luke/Desktop/chalmers_thesis/data/Pybughive/black/tests/test_format.py": [
+                {
+                    "type": "single_line",
+                    "code": "    \"fmtskip3\",\n    \"fmtskip4\",\n    \"fmtskip5\",\n    \"fstring\",\n    \"function\",\n    \"function2\",\n"
+                }
+            ]
+        },
+        "test_cases_after": {
+            "/home/luke/Desktop/chalmers_thesis/data/Pybughive/black/tests/data/fmtskip6.py": [
+                {
+                    "type": "function",
+                    "code": "    def f(self):\n        for line in range(10):\n            if True:\n                pass  # fmt: skip\n\n"
+                }
+            ],
+            "/home/luke/Desktop/chalmers_thesis/data/Pybughive/black/tests/test_format.py": [
+                {
+                    "type": "single_line",
+                    "code": "    \"fmtskip3\",\n    \"fmtskip4\",\n    \"fmtskip5\",\n    \"fmtskip6\",\n    \"fstring\",\n    \"function\",\n    \"function2\",\n"
+                }
+            ]
+        },
+        "relevant_test_cases": [],
+        "id": 0
+    }
+]

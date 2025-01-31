@@ -1,16 +1,25 @@
 import os
-import json
 import subprocess
 import pandas as pd
 from pathlib import Path
-from java_commit_utils import (
+from git import Repo
+
+import sys
+
+# Add the parent directory to the Python path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+from commit_utils import (
     parse_patch,
     extract_functions_and_classes_by_patch,
     apply_and_extract_with_commit,
     get_commit_log,
     get_commit_changes,
     get_jira_description,
+    extract_test_methods_from_file,
 )
+
+from utils import save_to_json
 
 
 def defects4j_checkout(base_path, project, bug_id, output_dir):
@@ -71,7 +80,7 @@ def apply_and_extract_with_patch(repo_path, changes, patch_file, to_get_bugs=Fal
     return extracted_data
 
 
-def process_bug(base_path, projects_path, project, bug):
+def process_bug(base_path, projects_path, project, bug, to_use_patch=False, repo=None):
     """
     Process a single bug in a project.
     """
@@ -80,8 +89,6 @@ def process_bug(base_path, projects_path, project, bug):
     print(f"\nProcessing {project} bug {bug_id}...")
 
     project_path = os.path.join(projects_path, project)
-
-    to_use_patch = False
 
     if to_use_patch:
         repo_path = os.path.join(project_path, f"{project}_bug_{bug_id}")
@@ -116,24 +123,27 @@ def process_bug(base_path, projects_path, project, bug):
         )
 
     else:
-        repo_path = os.path.join(base_path, "project_repos", f"repo_{project}")
-
         commit_hash = bug["revision_fixed"]
-        patch_content = get_commit_changes(repo_path, commit_hash)
+        patch_content = get_commit_changes(repo, commit_hash)
 
         changes = parse_patch(patch_content, is_file_name=False)
 
         print("Processing the code before the commit...")
         functions_before, test_cases_before = apply_and_extract_with_commit(
-            repo_path, changes, bug, to_get_bugs=True
+            repo, changes, bug["revision_buggy"], to_get_bugs=True
         )
 
         print("Processing the code after the commit...")
         functions_after, test_cases_after = apply_and_extract_with_commit(
-            repo_path, changes, bug
+            repo, changes, commit_hash
         )
-        description_log = get_commit_log(repo_path, bug["revision_fixed"])
+        description_log = get_commit_log(repo, bug["revision_fixed"])
         description_question = get_jira_description(bug["url"])
+
+        relavan_test_cases_file = os.path.join(
+            project_path, "relevant_tests", str(bug_id)
+        )
+        relevant_test_cases = get_relevant_test_cases(relavan_test_cases_file, repo)
 
     # Organize the data
     bug_data = {
@@ -144,26 +154,39 @@ def process_bug(base_path, projects_path, project, bug):
         "function_codes_after": functions_after,
         "test_cases_before": test_cases_before,
         "test_cases_after": test_cases_after,
-        "relevant_test_cases": [],  # TODO: Add relevant test cases
+        "relevant_test_cases": relevant_test_cases,
     }
 
     print(f"Processed {project} bug {bug_id}.\n")
     return bug_data
 
 
-def save_to_json(data, output_file):
+def get_relevant_test_cases(file_path, repo):
     """
-    Save data to a JSON file.
-    """
-    try:
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    Get the relevant test cases.
 
-        # Write/overwrite file
-        with open(output_file, "w") as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        print(f"Error saving JSON file {output_file}: {e}")
+    Returns:
+        Dict: {
+            test_case_name: { path: xxx, code: test_case_code },
+            ...
+    """
+    relevant_test_case_files = []
+    # Get the relevant test cases
+    if os.path.exists(file_path):
+        with open(file_path, "r") as file:
+            relevant_test_case_files = file.readlines()
+
+    # Get the detailed code of test cases
+    test_cases = {}
+    for test_case_file in relevant_test_case_files:
+        test_case_file = test_case_file.strip()
+
+        package_path = test_case_file.replace(".", os.sep) + ".java"
+
+        full_path = os.path.join(repo.working_dir, "src", "test", "java", package_path)
+        test_cases.update(extract_test_methods_from_file(full_path))
+
+    return test_cases
 
 
 def get_active_bugs(project_path):
@@ -212,6 +235,9 @@ def process_defects4j(base_path, output_path):
     testing = True
     filtering = True
 
+    # Whether to use the patch files
+    to_use_patch = False
+
     projects_path = Path(base_path, "framework", "projects")
     projects = [
         name
@@ -227,6 +253,13 @@ def process_defects4j(base_path, output_path):
         project_path = os.path.join(projects_path, project)
         patch_dir = os.path.join(project_path, "patches")
         output_file = os.path.join(output_path, f"{project}.json")
+
+        repo = (
+            None
+            if to_use_patch
+            else Repo(os.path.join(base_path, "project_repos", f"repo_{project}"))
+        )
+
         if not os.path.exists(patch_dir):
             continue
 
@@ -235,10 +268,17 @@ def process_defects4j(base_path, output_path):
 
         for bug in bugs:
             # # TODO: for testing!
-            if testing and filtering and bug["bug_id"] != 1:
-                continue
+            # if testing and filtering and bug["bug_id"] != 1:
+            #     continue
             try:
-                bug_data = process_bug(base_path, projects_path, project, bug)
+                bug_data = process_bug(
+                    base_path,
+                    projects_path,
+                    project,
+                    bug,
+                    to_use_patch=to_use_patch,
+                    repo=repo,
+                )
                 bug_data["id"] = len(all_data)
                 all_data.append(bug_data)
             except Exception as e:
