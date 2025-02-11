@@ -74,7 +74,7 @@ def process_bug(repo, issue, project_info_config):
 
     # Organize the data
     bug_data = {
-        "source": f"pybughive_{repo.working_dir.split("/")[-1]}_{bug_id}",
+        "source": f"pybughive_{repo.working_dir.split('/')[-1]}_{bug_id}",
         "description_commit": description_log,
         "description_question": description_question,
         "function_codes_before": functions_before,
@@ -99,7 +99,7 @@ def process_issues(repo_path, issues, project_info_config):
         except Exception as e:
             print(f"Error processing {repo_path} bug {issue.id}: {e}")
 
-        break  # todo: remove this line
+        # break  # todo: remove this line
 
     return bugs_info
 
@@ -129,6 +129,9 @@ def main():
         output_file = os.path.join(OUTPUT_DIR, f"{repository}.json")
 
         print(f"Processing repository {repository}...")
+
+        if repository == "jax":
+            continue
         try:
             repo_path = clone_repo(username, repository, DATASET_PATH)
 

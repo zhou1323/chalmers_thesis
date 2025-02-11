@@ -108,10 +108,6 @@ def extract_coverage_report(
                 if not context:
                     continue
 
-                parts = context.split(".")
-                if len(parts) >= 2:
-                    context = f"{parts[-2]}.{parts[-1]}"
-
                 # Initialize line_to_test_cases
                 line_to_test_cases.setdefault(file, {}).setdefault(line, [])
 

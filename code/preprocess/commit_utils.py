@@ -664,6 +664,19 @@ def get_relevant_test_cases(
     project_info_config,
     requirements_file=None,
 ):
+    """
+    Find relevant test cases that call the target methods.
+
+    Args:
+        functions_after: Extracted code structure after the commit
+        test_cases_before: Test cases before the commit
+        test_cases_after: Test cases after the commit
+        project_info_config: Project info configuration
+        requirements_file: Path to the requirements file
+
+    Returns:
+        dict: Relevant test cases that call the target methods
+    """
     function_code_lines = {}
     for file_name, function_codes in functions_after.items():
         for function_code in function_codes:
@@ -685,7 +698,11 @@ def get_relevant_test_cases(
     all_test_files = list(
         set(list(test_cases_before.keys()) + list(test_cases_after.keys()))
     )
+    if len(all_test_files) == 0:
+        return {}
+
     first_test_file = all_test_files[0]
+
     if "tests/" in first_test_file:
         test_directory = first_test_file.split("/tests/")[0] + "/tests/"
     elif "test/" in first_test_file:
@@ -737,26 +754,26 @@ def find_test_cases_by_python_code_lines(
     if filtered_cases is None:
         filtered_cases = []
 
-    if "tests/" in test_case_directory:
-        coverate_file_dir = test_case_directory.split("/tests/")[0]
-    elif "test/" in test_case_directory:
-        coverate_file_dir = test_case_directory.split("/test/")[0]
+    exact_test_folder = "tests" if "tests" in test_case_directory else "test"
+    coverage_file_dir = test_case_directory.split(exact_test_folder)[0]
 
     extract_coverage_report(
-        coverate_file_dir,
+        coverage_file_dir,
         all_test_files,
         requirements_file,
         redo_extraction=True,
         project_info_config=project_info_config,
     )
-    line_to_test = load_line2test_json(coverate_file_dir)
+    line_to_test = load_line2test_json(coverage_file_dir)
 
     test_files = find_test_files(test_case_directory)
     test_function_map = {}
     for file_path in test_files:
         with open(file_path, "r", encoding="utf-8") as f:
             code_str = f.read()
-        funcs_info = extract_functions_with_parso(code_str, file_path)
+        funcs_info = extract_functions_with_parso(
+            code_str, file_path, exact_test_folder
+        )
 
         test_function_map.update(funcs_info)
 
@@ -773,8 +790,9 @@ def find_test_cases_by_python_code_lines(
                 if line_str in line_to_test[src_file_path]:
                     test_func_names = line_to_test[src_file_path][line_str]
                     for func_name in test_func_names:
+                        clean_func_name = func_name.split(".")[-1]
                         if (
-                            func_name not in filtered_cases
+                            clean_func_name not in filtered_cases
                             and func_name in test_function_map
                         ):
                             if func_name not in results:
@@ -783,7 +801,9 @@ def find_test_cases_by_python_code_lines(
     return results
 
 
-def extract_functions_with_parso(code_str: str, file_path: str) -> dict:
+def extract_functions_with_parso(
+    code_str: str, file_path: str, exact_test_folder: str
+) -> dict:
     """
     Use Parso to extract functions from Python code.
 
@@ -821,6 +841,10 @@ def extract_functions_with_parso(code_str: str, file_path: str) -> dict:
                     full_name = (
                         func_name if not class_path else f"{class_path}.{func_name}"
                     )
+                    package_path = exact_test_folder + file_path.split(
+                        exact_test_folder
+                    )[-1].replace(".py", "")
+                    full_name = f"{package_path.replace('/','.')}.{full_name}"
                     func_code = node.get_code()
                     results[full_name] = {"file_path": file_path, "code": func_code}
         elif node.type == "classdef":
