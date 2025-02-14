@@ -1,5 +1,10 @@
 # Ignore all files in the data directory
 data/*
 
+wandb/*
+
+save/*
+
+datasets/*
 # Ignore the automatically generated python cache files
 __pycache__/

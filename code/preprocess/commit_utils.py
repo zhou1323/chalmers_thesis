@@ -70,9 +70,12 @@ def apply_and_extract_with_commit(
     except Exception as e:
         print(f"Common Error applying commit: {e}")
 
-    extracted_data = extract_functions_and_classes_by_patch(
-        repo.working_dir, changes, to_get_old_lines=to_get_bugs, language=language
-    )
+    try:
+        extracted_data = extract_functions_and_classes_by_patch(
+            repo.working_dir, changes, to_get_old_lines=to_get_bugs, language=language
+        )
+    except Exception as e:
+        print(f"Error applying commits: {e}")
 
     function_codes, test_cases = {}, {}
 
@@ -139,9 +142,9 @@ def get_commit_changes(repo: Repo, commit_hash: str, parent_commit_hash=None) ->
     try:
         # Get commit details
         if parent_commit_hash:
-            return repo.git.diff(parent_commit_hash, commit_hash)
+            return repo.git.diff(parent_commit_hash, commit_hash, unified=0)
 
-        result = repo.git.show(commit_hash)
+        result = repo.git.show(commit_hash, unified=0)
 
         return result
 
@@ -203,23 +206,29 @@ def extract_functions_and_classes_by_patch(
                         change["new_end"],
                     )
 
-                if language == "java":
-                    result = extract_code_structure_java(
-                        code, code_start_line, code_end_line
-                    )
-                elif language == "python":
-                    result = extract_code_structure_python(
-                        code, code_start_line, code_end_line
-                    )
-                else:
+                try:
+                    if language == "java":
+                        result = extract_code_structure_java(
+                            code, code_start_line, code_end_line
+                        )
+                    elif language == "python":
+                        result = extract_code_structure_python(
+                            code, code_start_line, code_end_line
+                        )
+                    else:
+                        result = None
+                except Exception as e:
+                    print(f"Error extracting code structure: {e}")
                     result = None
 
                 if result:
-                    extracted_data[file_path] = (
-                        [result]
-                        if file_path not in extracted_data
-                        else extracted_data[file_path] + [result]
-                    )
+                    if file_path in extracted_data:
+                        extracted_data[file_path].update(result)
+                    else:
+                        extracted_data[file_path] = result
+    for file_path, data in extracted_data.items():
+        extracted_data[file_path] = list(data.values())
+
     return extracted_data
 
 
@@ -329,7 +338,7 @@ def extract_code_structure_java(java_code, start_line, end_line):
             result = _extract_structure(
                 tree, lines, start_line, end_line, node_type, structure_type
             )
-            if result:
+            if len(result.values()) > 0:
                 return result
 
         # Special handling for class declarations
@@ -381,8 +390,10 @@ def _extract_class_fields(tree, lines, start_line, end_line):
                 [class_start, first_method_line], [start_line, end_line]
             ):
                 return {
-                    "type": "class",
-                    "code": "".join(lines[class_start - 1 : first_method_line - 1]),
+                    f"{class_start}-{first_method_line}": {
+                        "type": "class",
+                        "code": "".join(lines[class_start - 1 : first_method_line - 1]),
+                    }
                 }
     return None
 
@@ -435,13 +446,15 @@ def _extract_structure(tree, lines, start_line, end_line, node_type, structure_t
                 [struct_start, struct_end], [start_line, end_line]
             ):
                 return {
-                    "type": structure_type,
-                    "code": "".join(lines[struct_start - 1 : struct_end]),
-                    "name": node.name,
-                    "start_line": struct_start,
-                    "end_line": struct_end,
+                    f"{struct_start}-{struct_end}": {
+                        "type": structure_type,
+                        "code": "".join(lines[struct_start - 1 : struct_end]),
+                        "name": node.name,
+                        "start_line": struct_start,
+                        "end_line": struct_end,
+                    }
                 }
-    return None
+    return {}
 
 
 def _extract_single_line(lines, start_line, end_line):
@@ -458,10 +471,12 @@ def _extract_single_line(lines, start_line, end_line):
     """
     if has_intersection_between_code_lines([1, len(lines)], [start_line, end_line]):
         return {
-            "type": "single_line",
-            "code": "".join(lines[start_line - 1 : end_line]),
-            "start_line": start_line,
-            "end_line": end_line,
+            f"{start_line}_{end_line}": {
+                "type": "single_line",
+                "code": "".join(lines[start_line - 1 : end_line]),
+                "start_line": start_line,
+                "end_line": end_line,
+            }
         }
     return None
 
@@ -583,7 +598,7 @@ def extract_code_structure_python(python_code, start_line, end_line):
             result = _extract_structure_python(
                 tree, lines, start_line, end_line, node_type, structure_type
             )
-            if result:
+            if len(result.values()) > 0:
                 return result
 
         # Fallback to single line extraction
@@ -611,32 +626,44 @@ def _extract_structure_python(
     Returns:
         dict: Extracted structure
     """
+    result = {}
+
     if node.type == node_type:
         # Determine the start and end lines of the structure
         struct_start = node.start_pos[0]
         struct_end = node.end_pos[0]
 
+        # Check for decorators
+        if hasattr(node, "get_decorators"):
+            decorators = node.get_decorators()
+        else:
+            decorators = []
+        if len(decorators) > 0:
+            struct_start = decorators[0].start_pos[0]
+
         if has_intersection_between_code_lines(
             [struct_start, struct_end], [start_line, end_line]
         ):
             return {
-                "type": structure_type,
-                "name": node.name.value,
-                "code": "".join(lines[struct_start - 1 : struct_end]),
-                "start_line": struct_start,
-                "end_line": struct_end,
+                f"{struct_start}-{struct_end}": {
+                    "type": structure_type,
+                    "name": node.name.value,
+                    "code": "".join(lines[struct_start - 1 : struct_end]),
+                    "start_line": struct_start,
+                    "end_line": struct_end,
+                }
             }
 
     # Recursively check child nodes
     if hasattr(node, "children"):
         for child in node.children:
-            result = _extract_structure_python(
+            child_result = _extract_structure_python(
                 child, lines, start_line, end_line, node_type, structure_type
             )
-            if result:
-                return result
+            if (len(child_result.values())) > 0:
+                result.update(child_result)
 
-    return None
+    return result
 
 
 def find_test_files(directory):
@@ -661,7 +688,7 @@ def get_relevant_test_cases(
     functions_after,
     test_cases_before,
     test_cases_after,
-    project_info_config,
+    project_info_config=None,
     requirements_file=None,
 ):
     """

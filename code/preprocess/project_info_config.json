@@ -92,7 +92,7 @@
     },
     "pandas": {
       "python_version": "3.8",
-      "install_steps": "pip install setuptools==39.1.0; pip install numpy==1.16.0; pip install cython==0.29.36; pip install pytz python-dateutil nose py pytest; make clean; make develop"
+      "install_steps": "pip install --upgrade setuptools; pip install numpy==1.16.0; pip install cython==0.29.36; pip install pytz python-dateutil nose py pytest; make clean; make develop"
     },
     "scrapy": {
       "python_version": "3.8",
@@ -120,7 +120,7 @@
     },
     "freqtrade": {
       "python_version": "3.8",
-      "install_steps": "sudo wget -c http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz; tar -xzf ta-lib-0.4.0-src.tar.gz; cd ta-lib && ./configure --prefix=/usr && make && sudo make install ; pip install TA-Lib; pip install --upgrade pip wheel; export LD_LIBRARY_PATH=${HOME}/dependencies/lib:$LD_LIBRARY_PATH; export TA_LIBRARY_PATH=${HOME}/dependencies/lib; export TA_INCLUDE_PATH=${HOME}/dependencies/include; pip install -r requirements-dev.txt; pip install -e ."
+      "install_steps": " pip install arrow numpy; sudo wget -c http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz; tar -xzf ta-lib-0.4.0-src.tar.gz; cd ta-lib && ./configure --prefix=/usr && make && sudo make install ; pip install TA-Lib; pip install --upgrade pip wheel; export LD_LIBRARY_PATH=${HOME}/dependencies/lib:$LD_LIBRARY_PATH; export TA_LIBRARY_PATH=${HOME}/dependencies/lib; export TA_INCLUDE_PATH=${HOME}/dependencies/include; pip install -r requirements-dev.txt; pip install -e ."
     },
     "jax": {
       "python_version": "3.10",
