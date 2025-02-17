@@ -191,7 +191,7 @@ def extract_functions_and_classes_by_patch(
     """
     extracted_data = {}
     for change in changes:
-        file_path = os.path.join(repo_path, change["file"])
+        file_path = os.path.normpath(os.path.join(repo_path, change["file"]))
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                 code = f.read()
