@@ -5,6 +5,12 @@ wandb/*
 
 save/*
 
-datasets/*
+dataset/*
+
+# Ignore the results
+code/models/pytester/baselines/*/output/*
+code/models/pytester/results/*
+code/models/pytester/datasets/*
+
 # Ignore the automatically generated python cache files
 __pycache__/
