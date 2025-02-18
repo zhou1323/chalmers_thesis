@@ -33,6 +33,7 @@ def process_bug(
     repo,
     project_info_config,
     requirements_file,
+    need_relevant_test_cases=True,
 ):
     """
     Process a single bug in a project.
@@ -54,17 +55,22 @@ def process_bug(
     description_log = get_commit_log(repo, fixed_commit_id)
 
     # Get relavant test cases
-    relevant_test_cases = get_relevant_test_cases(
-        functions_after,
-        test_cases_before,
-        test_cases_after,
-        project_info_config,
-        requirements_file,
+    relevant_test_cases = (
+        get_relevant_test_cases(
+            functions_after,
+            test_cases_before,
+            test_cases_after,
+            project_info_config,
+            requirements_file,
+        )
+        if need_relevant_test_cases
+        else {}
     )
 
     # Organize the data
     bug_data = {
         "source": f"bugsinpy_{project}_{bug_id}",
+        "commid_id": fixed_commit_id,
         "description_commit": description_log,
         "description_question": "",
         "function_codes_before": functions_before,
@@ -76,7 +82,9 @@ def process_bug(
     return bug_data
 
 
-def process_bugsInPy(base_path, output_path, only_clone_repo=False):
+def process_bugsInPy(
+    base_path, output_path, only_clone_repo=False, need_relevant_test_cases=True
+):
     projects_path = Path(base_path, "projects")
     projects = [
         name
@@ -89,6 +97,9 @@ def process_bugsInPy(base_path, output_path, only_clone_repo=False):
     )
 
     for project in projects:
+        if project == "youtube-dl":
+            continue  # todo: Skip youtube-dl for now. It's too big.
+
         all_data = []
 
         project_path = os.path.join(projects_path, project)
@@ -145,6 +156,7 @@ def process_bugsInPy(base_path, output_path, only_clone_repo=False):
                     requirements_file=os.path.join(
                         os.getcwd(), bug_folder, "requirements.txt"
                     ),
+                    need_relevant_test_cases=need_relevant_test_cases,
                 )
                 bug_data["id"] = len(all_data)
                 all_data.append(bug_data)
@@ -160,4 +172,9 @@ if __name__ == "__main__":
     bugsInPy_path = "data/BugsInPy"
     output_path = "data/processed_BugsInPy"
 
-    process_bugsInPy(bugsInPy_path, output_path, only_clone_repo=False)
+    process_bugsInPy(
+        bugsInPy_path,
+        output_path,
+        only_clone_repo=False,
+        need_relevant_test_cases=False,
+    )

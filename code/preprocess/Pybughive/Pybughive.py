@@ -45,7 +45,7 @@ PROJECT_INFO_CONFIG = "project_info_config.json"
 OUTPUT_DIR = "data/processed_Pybughive"
 
 
-def process_bug(repo, issue, project_info_config):
+def process_bug(repo, issue, project_info_config, need_relevant_test_cases=True):
     bug_id = issue["id"]
     print(f"Processing {repo.working_dir} bug {bug_id}...")
 
@@ -68,13 +68,21 @@ def process_bug(repo, issue, project_info_config):
         description_question = issue["title"]
 
         # Get relavant test cases
-        relevant_test_cases = get_relevant_test_cases(
-            functions_after, test_cases_before, test_cases_after, project_info_config
+        relevant_test_cases = (
+            get_relevant_test_cases(
+                functions_after,
+                test_cases_before,
+                test_cases_after,
+                project_info_config,
+            )
+            if need_relevant_test_cases
+            else {}
         )
 
     # Organize the data
     bug_data = {
         "source": f"pybughive_{repo.working_dir.split('/')[-1]}_{bug_id}",
+        "commit_hash": commit_hash,
         "description_commit": description_log,
         "description_question": description_question,
         "function_codes_before": functions_before,
@@ -88,16 +96,23 @@ def process_bug(repo, issue, project_info_config):
 
 
 # Process each issue in a repository
-def process_issues(repo_path, issues, project_info_config):
+def process_issues(
+    repo_path, issues, project_info_config, need_relevant_test_cases=True
+):
     repo = Repo(repo_path)
     bugs_info = []
     for issue in issues:
         try:
-            bug_data = process_bug(repo, issue, project_info_config)
+            bug_data = process_bug(
+                repo,
+                issue,
+                project_info_config,
+                need_relevant_test_cases=need_relevant_test_cases,
+            )
             bug_data["id"] = len(bugs_info)
             bugs_info.append(bug_data)
         except Exception as e:
-            print(f"Error processing {repo_path} bug {issue.id}: {e}")
+            print(f"Error processing {repo_path} bug {issue['id']}: {e}")
 
         # break  # todo: remove this line
 
@@ -138,7 +153,9 @@ def main():
             if only_clone_repo or os.path.exists(output_file):
                 continue
 
-            bugs_info = process_issues(repo_path, issues, project_info_config)
+            bugs_info = process_issues(
+                repo_path, issues, project_info_config, need_relevant_test_cases=False
+            )
             all_bugs_info.extend(bugs_info)
         except Exception as e:
             print(f"Error processing repository {repository}: {e}")

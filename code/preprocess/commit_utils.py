@@ -610,7 +610,7 @@ def extract_code_structure_python(python_code, start_line, end_line):
 
 
 def _extract_structure_python(
-    node, lines, start_line, end_line, node_type, structure_type
+    node, lines, start_line, end_line, node_type, structure_type, class_path=None
 ):
     """
     Generic structure extractor for functions and classes.
@@ -644,9 +644,13 @@ def _extract_structure_python(
         if has_intersection_between_code_lines(
             [struct_start, struct_end], [start_line, end_line]
         ):
+            full_name = (
+                node.name.value if not class_path else f"{class_path}.{node.name.value}"
+            )
             return {
                 f"{struct_start}-{struct_end}": {
                     "type": structure_type,
+                    "full_name": full_name,
                     "name": node.name.value,
                     "code": "".join(lines[struct_start - 1 : struct_end]),
                     "start_line": struct_start,
@@ -656,9 +660,29 @@ def _extract_structure_python(
 
     # Recursively check child nodes
     if hasattr(node, "children"):
+        if node.type == "classdef":
+            class_name_leaf = node.children[1]  # 'class' [whitespace] 'ClassName' ...
+            new_class_path = (
+                (
+                    class_name_leaf.value
+                    if not class_path
+                    else f"{class_path}.{class_name_leaf.value}"
+                )
+                if class_name_leaf.type == "name"
+                else class_path
+            )
+        else:
+            new_class_path = class_path
+
         for child in node.children:
             child_result = _extract_structure_python(
-                child, lines, start_line, end_line, node_type, structure_type
+                child,
+                lines,
+                start_line,
+                end_line,
+                node_type,
+                structure_type,
+                class_path=new_class_path,
             )
             if (len(child_result.values())) > 0:
                 result.update(child_result)
